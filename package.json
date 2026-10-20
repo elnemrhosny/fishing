@@ -1,0 +1,18 @@
+{
+  "name": "fishing-ecommerce",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
+    "dev:server": "bun run --cwd server dev",
+    "dev:client": "bun run --cwd client dev",
+    "build": "bun run --cwd client build",
+    "migrate": "bun run --cwd server migrate",
+    "seed": "bun run --cwd server db/seed.js",
+    "test": "NODE_ENV=test bun test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
