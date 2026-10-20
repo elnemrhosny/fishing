@@ -37,7 +37,7 @@ export function getTransporter() {
 }
 
 export async function sendVerificationEmail({ email, name, token }) {
-  const appUrl = process.env.APP_URL || 'http://localhost:5173';
+  const appUrl = process.env.CLIENT_URL || process.env.APP_URL || 'http://localhost:5173';
   const verifyUrl = `${appUrl}/verify-email?token=${token}`;
   const from = process.env.FROM_EMAIL || '"FishingPro" <noreply@fishingpro.com>';
 
@@ -68,7 +68,7 @@ export async function sendVerificationEmail({ email, name, token }) {
 }
 
 export async function sendPasswordResetEmail({ email, name, token }) {
-  const appUrl = process.env.APP_URL || 'http://localhost:5173';
+  const appUrl = process.env.CLIENT_URL || process.env.APP_URL || 'http://localhost:5173';
   const resetUrl = `${appUrl}/reset-password?token=${token}`;
   const from = process.env.FROM_EMAIL || '"FishingPro" <noreply@fishingpro.com>';
 

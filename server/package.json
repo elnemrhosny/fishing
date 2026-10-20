@@ -2,6 +2,7 @@
   "name": "fishing-server",
   "version": "1.0.0",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "dev": "bun --watch index.js",
     "start": "node index.js",

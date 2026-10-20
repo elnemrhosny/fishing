@@ -22,7 +22,7 @@ const app = express();
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : [process.env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
 
 app.use(cors({
   origin: allowedOrigins,
@@ -51,8 +51,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/pages', pageRoutes);
 app.use('/api/upload', uploadRoutes);
 
-// Serve static frontend in production
-if (process.env.NODE_ENV === 'production') {
+// Serve static frontend in standalone production (non-Vercel mode)
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientDist));
   app.get('*', (req, res) => {
