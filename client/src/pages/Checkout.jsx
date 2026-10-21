@@ -93,11 +93,12 @@ export default function Checkout() {
       window.location.href = paymobCheckoutUrl;
     } catch (err) {
       toast.dismiss();
-      setError(
+      const serverMsg =
         err.response?.data?.error ||
-          err.response?.data?.errors?.[0]?.msg ||
-          t('common.error')
-      );
+        err.response?.data?.details ||
+        err.response?.data?.errors?.[0]?.msg;
+      setError(serverMsg || t('common.error'));
+      toast.error(serverMsg || t('common.error'));
     } finally {
       setLoading(false);
     }

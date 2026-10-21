@@ -2,23 +2,30 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import api from '../lib/api.js';
-import { CheckCircle2, XCircle, Clock, ArrowRight, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, ShoppingBag } from 'lucide-react';
 
 export default function PaymentResult() {
   const { t, i18n } = useTranslation();
   const [params] = useSearchParams();
   const isAr = i18n.language === 'ar';
 
-  const orderId =
-    params.get('order') ||
+  // Read all potential identifier parameters from Paymob's redirection URL
+  const queryOrderId =
+    params.get('order_id') ||
+    params.get('special_reference') ||
     params.get('merchant_order_id') ||
     params.get('extra_order_id');
 
+  const paymobOrderId = params.get('order');
+  const transactionId = params.get('id') || params.get('transaction_id') || params.get('txn_id');
+  const successParam = params.get('success');
+
   const [paymentStatus, setPaymentStatus] = useState('checking'); // checking | paid | failed | pending
-  const [orderDetails, setOrderDetails] = useState(null);
+  const [resolvedOrderId, setResolvedOrderId] = useState(queryOrderId || '');
 
   useEffect(() => {
-    if (!orderId) {
+    // If we have neither an order identifier nor a transaction ID
+    if (!queryOrderId && !paymobOrderId && !transactionId) {
       setPaymentStatus('failed');
       return;
     }
@@ -28,24 +35,42 @@ export default function PaymentResult() {
 
     const checkStatus = async () => {
       try {
-        const res = await api.get(`/payments/status/${orderId}`);
+        const lookupTarget = queryOrderId || paymobOrderId || transactionId || 'verify';
+
+        const res = await api.get(`/payments/status/${lookupTarget}`, {
+          params: {
+            order_id: queryOrderId || undefined,
+            paymob_order_id: paymobOrderId || undefined,
+            transaction_id: transactionId || undefined,
+            success: successParam || undefined,
+          },
+        });
+
         if (!isMounted) return;
 
-        setOrderDetails(res.data);
+        if (res.data?.order_id) {
+          setResolvedOrderId(res.data.order_id);
+        }
 
         if (res.data.payment_status === 'paid') {
           setPaymentStatus('paid');
-        } else if (res.data.payment_status === 'failed') {
+        } else if (res.data.payment_status === 'failed' || successParam === 'false') {
           setPaymentStatus('failed');
         } else if (attempts < 6) {
-          // Poll every 2.5 seconds up to 6 times to give webhook time
           attempts++;
           setTimeout(checkStatus, 2500);
         } else {
           setPaymentStatus('pending');
         }
-      } catch {
-        if (isMounted) setPaymentStatus('pending');
+      } catch (err) {
+        if (!isMounted) return;
+
+        // If client reported success=true, show pending rather than hard failure
+        if (successParam === 'true') {
+          setPaymentStatus('pending');
+        } else {
+          setPaymentStatus('failed');
+        }
       }
     };
 
@@ -54,11 +79,13 @@ export default function PaymentResult() {
     return () => {
       isMounted = false;
     };
-  }, [orderId]);
+  }, [queryOrderId, paymobOrderId, transactionId, successParam]);
+
+  const displayOrderRef = resolvedOrderId || queryOrderId || paymobOrderId;
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-16">
-      <div className="max-w-md w-full card p-8 sm:p-10 text-center space-y-6 shadow-lg">
+      <div className="max-w-md w-full card p-8 sm:p-10 text-center space-y-6 shadow-xl border-gray-200/80 dark:border-gray-800">
         {paymentStatus === 'checking' && (
           <div className="space-y-4">
             <div className="w-16 h-16 rounded-full bg-brand-50 dark:bg-brand-950/60 text-brand-600 flex items-center justify-center mx-auto animate-pulse">
@@ -66,14 +93,14 @@ export default function PaymentResult() {
             </div>
             <h1 className="text-xl font-bold">{t('common.loading')}</h1>
             <p className="text-xs text-gray-500">
-              {isAr ? 'جاري التحقق من نجاح عملية الدفع...' : 'Verifying transaction status with the payment gateway...'}
+              {isAr ? 'جاري تأكيد عملية الدفع وتحديث حالة الطلب...' : 'Verifying transaction status with payment gateway...'}
             </p>
           </div>
         )}
 
         {paymentStatus === 'paid' && (
-          <div className="space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+          <div className="space-y-4 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <h1 className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
@@ -81,17 +108,19 @@ export default function PaymentResult() {
             </h1>
             <p className="text-xs text-gray-500">
               {isAr
-                ? 'تم تأكيد الدفع واستلام طلبك بنجاح وجاري تجهيزه للشحن.'
-                : 'Your payment was successfully authorized and your order is now in processing.'}
+                ? 'تم تأكيد الدفع بنجاح وجاري تجهيز طلبك للشحن والتوصيل.'
+                : 'Your payment was successfully confirmed and your order is now in processing.'}
             </p>
-            {orderId && (
-              <p className="text-xs font-mono bg-gray-100 dark:bg-gray-800 py-1.5 px-3 rounded-lg text-gray-600 dark:text-gray-300">
-                {t('orders.orderNumber')}{orderId.slice(0, 8).toUpperCase()}
+
+            {displayOrderRef && (
+              <p className="text-xs font-mono font-bold bg-gray-100 dark:bg-gray-800 py-1.5 px-3 rounded-lg text-gray-700 dark:text-gray-300 inline-block">
+                {t('orders.orderNumber')}{displayOrderRef.slice(0, 8).toUpperCase()}
               </p>
             )}
+
             <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
-              {orderId && (
-                <Link to={`/orders/${orderId}`} className="btn-primary text-xs py-2.5 px-5">
+              {resolvedOrderId && (
+                <Link to={`/orders/${resolvedOrderId}`} className="btn-primary text-xs py-2.5 px-5">
                   {t('orders.viewDetails')}
                 </Link>
               )}
@@ -103,8 +132,8 @@ export default function PaymentResult() {
         )}
 
         {paymentStatus === 'failed' && (
-          <div className="space-y-4">
-            <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+          <div className="space-y-4 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto shadow-sm">
               <XCircle className="w-10 h-10" />
             </div>
             <h1 className="text-2xl font-extrabold text-red-600 dark:text-red-400">
@@ -113,8 +142,9 @@ export default function PaymentResult() {
             <p className="text-xs text-gray-500">
               {isAr
                 ? 'تعذر إتمام عملية الدفع. يمكنك إعادة المحاولة أو اختيار الدفع عند الاستلام.'
-                : 'The payment could not be processed. Please retry or choose Cash on Delivery.'}
+                : 'The payment could not be completed. You can retry with a different method or select Cash on Delivery.'}
             </p>
+
             <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
               <Link to="/checkout" className="btn-primary text-xs py-2.5 px-5">
                 {t('common.retry')}
@@ -132,16 +162,21 @@ export default function PaymentResult() {
               <Clock className="w-10 h-10" />
             </div>
             <h1 className="text-xl font-bold text-amber-600 dark:text-amber-400">
-              {isAr ? 'الدفع قيد المراجعة' : 'Payment Processing'}
+              {isAr ? 'الدفع قيد المراجعة' : 'Payment Being Processed'}
             </h1>
             <p className="text-xs text-gray-500">
               {isAr
-                ? 'طلبك مسجل ونحن في انتظار إشعار التأكيد النهائي من البنك/المحفظة.'
-                : 'Your order was registered. We are awaiting the final confirmation callback from your provider.'}
+                ? 'طلبك مسجل ونحن في انتظار إشعار التأكيد النهائي من المحفظة أو البنك.'
+                : 'Your order was registered. We are awaiting final confirmation from the provider.'}
             </p>
+            {displayOrderRef && (
+              <p className="text-xs font-mono font-bold bg-gray-100 dark:bg-gray-800 py-1.5 px-3 rounded-lg text-gray-700 dark:text-gray-300 inline-block">
+                {t('orders.orderNumber')}{displayOrderRef.slice(0, 8).toUpperCase()}
+              </p>
+            )}
             <div className="pt-4 flex justify-center gap-3">
-              {orderId && (
-                <Link to={`/orders/${orderId}`} className="btn-primary text-xs py-2.5 px-5">
+              {resolvedOrderId && (
+                <Link to={`/orders/${resolvedOrderId}`} className="btn-primary text-xs py-2.5 px-5">
                   {t('orders.viewDetails')}
                 </Link>
               )}
